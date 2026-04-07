@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-Load NPI and Equifax Las Vegas JSONL files into Senzing via gRPC.
+Load JSONL files into Senzing via gRPC.
 
 Usage:
-    python load_lasvegas_data.py
-    python load_lasvegas_data.py --data-dir ./data
-    python load_lasvegas_data.py --files data/npi-lasvegas.jsonl data/equifax-lasvegas_A.jsonl
+    python load_data.py --files data/npi-lasvegas-people.jsonl data/equifax-lasvegas_A-people.jsonl
 
 Environment variables:
     SENZING_GRPC_HOST  (default: localhost)
@@ -22,12 +20,6 @@ from pathlib import Path
 import grpc
 from senzing import SzError
 from senzing_grpc import SzAbstractFactoryGrpc
-
-
-DEFAULT_FILES = [
-    "data/npi-lasvegas-people.jsonl",
-    "data/equifax-lasvegas_A-people.jsonl",
-]
 
 
 def detect_data_source(file_path: Path) -> str:
@@ -150,12 +142,8 @@ def parse_args():
     parser.add_argument(
         "--files",
         nargs="+",
-        help="JSONL files to load (default: data/npi-lasvegas.jsonl data/equifax-lasvegas_A.jsonl)",
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        help="Directory to resolve default file names against (default: cwd)",
+        required=True,
+        help="JSONL files to load",
     )
     parser.add_argument(
         "--host",
@@ -173,12 +161,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    if args.files:
-        files = [Path(f) for f in args.files]
-    elif args.data_dir:
-        files = [args.data_dir / Path(f).name for f in DEFAULT_FILES]
-    else:
-        files = [Path(f) for f in DEFAULT_FILES]
+    files = [Path(f) for f in args.files]
 
     missing = [f for f in files if not f.exists()]
     if missing:
