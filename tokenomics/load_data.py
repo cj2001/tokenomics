@@ -25,8 +25,8 @@ from senzing_grpc import SzAbstractFactoryGrpc
 
 
 DEFAULT_FILES = [
-    "data/npi-lasvegas.jsonl",
-    "data/equifax-lasvegas_A.jsonl",
+    "data/npi-lasvegas-people.jsonl",
+    "data/equifax-lasvegas_A-people.jsonl",
 ]
 
 
