@@ -28,7 +28,13 @@ from senzing_grpc import SzAbstractFactoryGrpc
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Generate entity resolution overlap report from Senzing."
+        description="Generate entity resolution overlap report from Senzing or a JSONL file."
+    )
+    parser.add_argument(
+        "--file",
+        default=None,
+        help="Path to a JSONL file of resolved entities (e.g., LLM ER output). "
+             "If provided, reads from the file instead of Senzing gRPC.",
     )
     parser.add_argument(
         "--host",
@@ -65,7 +71,22 @@ def export_entities(sz_engine):
         sz_engine.close_export_report(handle)
 
 
-def build_stats(sz_engine):
+def entities_from_file(file_path):
+    """Read resolved entities from a JSONL file (e.g., LLM ER output)."""
+    with open(file_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entity = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "RESOLVED_ENTITY" in entity:
+                yield entity
+
+
+def build_stats(entity_iter):
     """Iterate over exported entities and accumulate statistics."""
     # Per data-source counters
     ds_record_count = Counter()
@@ -87,7 +108,7 @@ def build_stats(sz_engine):
 
     entity_count = 0
 
-    for entity in export_entities(sz_engine):
+    for entity in entity_iter:
         resolved = entity.get("RESOLVED_ENTITY", {})
         entity_id = resolved.get("ENTITY_ID")
         records = resolved.get("RECORDS", [])
@@ -280,13 +301,21 @@ def print_report(stats):
 def main():
     args = parse_args()
 
-    print(f"Connecting to Senzing at {args.host}:{args.port}")
-    grpc_channel = grpc.insecure_channel(f"{args.host}:{args.port}")
-    sz_abstract_factory = SzAbstractFactoryGrpc(grpc_channel)
-    sz_engine = sz_abstract_factory.create_engine()
+    if args.file:
+        if not os.path.isfile(args.file):
+            print(f"Error: file not found: {args.file}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Reading entities from: {args.file}")
+        entity_iter = entities_from_file(args.file)
+    else:
+        print(f"Connecting to Senzing at {args.host}:{args.port}")
+        grpc_channel = grpc.insecure_channel(f"{args.host}:{args.port}")
+        sz_abstract_factory = SzAbstractFactoryGrpc(grpc_channel)
+        sz_engine = sz_abstract_factory.create_engine()
+        entity_iter = export_entities(sz_engine)
 
     print("Exporting entities and computing statistics...")
-    stats = build_stats(sz_engine)
+    stats = build_stats(entity_iter)
     print_report(stats)
 
 
