@@ -32,7 +32,7 @@ import anthropic
 import tiktoken
 from dotenv import load_dotenv
 
-# Claude Opus 4.6 pricing (per million tokens)
+# Claude Opus 4.7 pricing (per million tokens)
 INPUT_COST_PER_MTOK = 5.00
 OUTPUT_COST_PER_MTOK = 25.00
 
@@ -194,8 +194,24 @@ def get_encoder():
 
 
 def estimate_tokens(text):
-    """Fast local token estimate using tiktoken."""
+    """Fast local token estimate using tiktoken.
+
+    Approximate — the cl100k_base tokenizer differs from Claude's, and Opus 4.7's
+    tokenizer in particular can use up to ~35% more tokens than tiktoken predicts.
+    Used for inner-loop batch packing where speed matters and DEFAULT_TOKEN_BUDGET
+    leaves margin. For user-facing cost estimates use count_tokens_api().
+    """
     return len(get_encoder().encode(text))
+
+
+def count_tokens_api(client, model, system_text, user_text):
+    """Exact token count from the Anthropic API for a (system, user) message pair."""
+    resp = client.messages.count_tokens(
+        model=model,
+        system=system_text,
+        messages=[{"role": "user", "content": user_text}],
+    )
+    return resp.input_tokens
 
 
 def load_records(file_path):
@@ -464,7 +480,7 @@ def consolidate_cross_batch(client, model, batch_merges, max_tokens):
     )
     user_message = "\n".join(parts)
 
-    msg_tokens = estimate_tokens(user_message)
+    msg_tokens = count_tokens_api(client, model, CONSOLIDATION_SYSTEM_PROMPT, user_message)
     if msg_tokens > DEFAULT_TOKEN_BUDGET:
         print(f"  WARNING: Consolidation message ({msg_tokens:,} tokens) exceeds "
               f"budget. Skipping cross-batch consolidation.")
@@ -681,8 +697,8 @@ def main():
     parser.add_argument("file2", help="Path to the second data file (JSONL or CSV)")
     parser.add_argument(
         "--model",
-        default="claude-opus-4-6",
-        help="Claude model (default: claude-opus-4-6)",
+        default="claude-opus-4-7",
+        help="Claude model (default: claude-opus-4-7)",
     )
     parser.add_argument(
         "--output",
@@ -755,11 +771,12 @@ def main():
             src_str = ", ".join(f"{s}: {c}" for s, c in sorted(sources.items()))
             print(f"  Batch {i}: {len(batch)} records ({src_str})")
 
-    # Estimate total cost
+    # Estimate total cost using the API's exact token counter (one call per batch).
+    print(f"\nCounting input tokens via Anthropic API ({num_batches} call(s))...")
     total_input_est = 0
     for batch in batches:
         msg = build_batch_message(batch)
-        total_input_est += estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(msg)
+        total_input_est += count_tokens_api(client, args.model, SYSTEM_PROMPT, msg)
 
     est_merged = max(int(total_records * 0.10), 10)
     estimated_output_tokens = min(est_merged * 250, args.max_tokens * num_batches)
