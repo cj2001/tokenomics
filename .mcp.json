@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "Senzing": {
+      "command": "/home/cj2001/.nvm/versions/node/v22.22.0/bin/node",
+      "args": [
+        "/home/cj2001/.nvm/versions/node/v22.22.0/bin/npx",
+        "-y",
+        "mcp-remote",
+        "https://sz-mcp-coworker.fly.dev/mcp"
+      ],
+      "env": {
+        "PATH": "/home/cj2001/.nvm/versions/node/v22.22.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      }
+    }
+  }
+}

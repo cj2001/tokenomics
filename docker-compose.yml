@@ -1,0 +1,132 @@
+version: '3.8'
+
+networks:
+  tokenomics-network:
+    driver: bridge
+
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: tokenomics_portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    networks:
+      - tokenomics-network
+
+  postgres:
+    image: postgres:15
+    container_name: tokenomics_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: workshop
+      POSTGRES_DB: tokenomics
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - tokenomics-network
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=128MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+
+  senzing:
+    image: senzing/serve-grpc:latest
+    container_name: tokenomics_senzing
+    ports:
+      - "8261:8261"
+    env_file:
+      - .env
+    environment:
+      SENZING_ENGINE_CONFIGURATION_JSON: >
+        {
+          "PIPELINE": {
+            "CONFIGPATH": "/etc/opt/senzing",
+            "RESOURCEPATH": "/opt/senzing/er/resources",
+            "SUPPORTPATH": "/opt/senzing/data",
+            "LICENSESTRINGBASE64": "${SENZING_LICENSE_BASE64}"
+          },
+          "SQL": {
+            "CONNECTION": "postgresql://postgres:workshop@postgres:5432:tokenomics?sslmode=disable"
+          }
+        }
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - tokenomics-network
+
+  jupyter:
+    build: .
+    container_name: tokenomics_jupyter
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - "18888:8888"
+    volumes:
+      - ./notebooks:/workspace/notebooks
+      - ./data:/workspace/data
+      - lancedb_data:/workspace/lancedb_data
+    env_file:
+      - .env
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      NB_UID: "${UID:-1000}"
+      NB_GID: "${GID:-1000}"
+      CHOWN_HOME: "yes"
+      CHOWN_HOME_OPTS: "-R"
+      # Senzing connection info
+      SENZING_GRPC_HOST: senzing
+      SENZING_GRPC_PORT: 8261
+      # Database connection info
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: workshop
+      POSTGRES_DB: tokenomics
+      # Senzing engine config
+      SENZING_ENGINE_CONFIGURATION_JSON: >
+        {
+          "PIPELINE": {
+            "CONFIGPATH": "/etc/opt/senzing",
+            "RESOURCEPATH": "/opt/senzing/er/resources",
+            "SUPPORTPATH": "/opt/senzing/data",
+            "LICENSESTRINGBASE64": "${SENZING_LICENSE_BASE64}"
+          },
+          "SQL": {
+            "CONNECTION": "postgresql://postgres:workshop@postgres:5432:tokenomics?sslmode=disable"
+          }
+        }
+    depends_on:
+      - senzing
+      - postgres
+    restart: unless-stopped
+    networks:
+      - tokenomics-network
+    command: >
+      bash -c "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser 
+      --allow-root --NotebookApp.token='' --NotebookApp.password=''"
+
+volumes:
+  portainer_data:
+  postgres_data:
+  lancedb_data:
