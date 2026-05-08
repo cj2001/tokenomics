@@ -52,7 +52,7 @@ And critically, both approaches saw the exact same input data as Senzing did at 
 
 Here's the headline figure.  Four panels...time, cost, total tokens used, and number of records merged.  All on log-log scales because the dynamic range gets wild fast.
 
-![Senzing vs LLM scaling across time, cost, tokens, and merges](tokenomics_results.jpg)
+![Senzing vs LLM scaling across time, cost, tokens, and merges](data/figures/tokenomics_results.jpg)
 
 Let me walk through what jumped out.
 
