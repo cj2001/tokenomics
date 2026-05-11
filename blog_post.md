@@ -1,4 +1,4 @@
-# I Pitted an LLM Against Senzing for Entity Resolution.  And Whew.
+# I Pitted an LLM Against Senzing for Agentic Entity Resolution.  And Whew.
 
 Okay so here's the deal.  I've been spending a lot of time lately poking at where LLMs actually earn their keep and where they're just expensive vibes in a trenchcoat.  Entity resolution (ER) felt like a fair fight on paper...take a pile of records about people, figure out which ones refer to the same human, merge accordingly.  LLMs are supposedly great at fuzzy text matching.  Senzing is a purpose-built ER engine that's been doing this for years.  Let the bake-off begin.
 
