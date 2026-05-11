@@ -2,6 +2,8 @@
 
 Okay so here's the deal.  I've been spending a lot of time lately poking at where LLMs actually earn their keep and where they're just expensive vibes in a trenchcoat.  Entity resolution (ER) felt like a fair fight on paper...take a pile of records about people, figure out which ones refer to the same human, merge accordingly.  LLMs are supposedly great at fuzzy text matching.  Senzing is a purpose-built ER engine that's been doing this for years.  Let the bake-off begin.
 
+Of course, others have tried entity resolution with LLMs before and gotten mixed results.  However, they notably relied heavily on customizing the data, the prompt, or both [\[1-4\]](#references).  What's different about this experiment is that I didn't reshape the data or hand-engineer a prompt to the benchmark...the LLM got the same JSONL records Senzing got (just converted to CSV for token efficiency).  That makes this less "how high can the LLM score with the right prompt" and more "how does a general-purpose LLM compare to a purpose-built engine when you drop them into the same pipeline slot."
+
 I went in genuinely curious.  I'll tell you up front that I expected the LLM to lose on cost and maybe win on flexibility, or maybe trade blows depending on the dataset size.  That is...not what happened.  What actually happened is that Senzing won across pretty much every metric that matters, and the gap got wider as the data got bigger.  This post is me showing my work.  And, of course, you can check out all of the code I used to run this experiment in [this GitHub repo](https://github.com/cj2001/tokenomics).
 
 ## The Setup
@@ -183,3 +185,13 @@ I came into this experiment willing to be impressed by the LLM.  I came out of i
 ## Acknowledgements
 
 I want to thank Paco Nathan, Jeff Butcher, and Brian Macy for their helpful discussions on this topic.
+
+## References
+
+1. Li, Y., Li, J., Suhara, Y., Doan, A., & Tan, W.-C.  *Deep Entity Matching with Pre-Trained Language Models* (Ditto).  arXiv:2004.00584, 2020.  Published in VLDB 2021.  [https://arxiv.org/abs/2004.00584](https://arxiv.org/abs/2004.00584)
+
+2. Peeters, R., Steiner, A., & Bizer, C.  *Entity Matching using Large Language Models*.  arXiv:2310.11244, 2023.  [https://arxiv.org/abs/2310.11244](https://arxiv.org/abs/2310.11244)
+
+3. *Match, Compare, or Select?  An Investigation of Large Language Models for Entity Matching.*  COLING 2025.  arXiv:2405.16884.  [https://aclanthology.org/2025.coling-main.8/](https://aclanthology.org/2025.coling-main.8/)
+
+4. *Structured Multi-Step Reasoning for Entity Matching Using Large Language Model.*  arXiv:2511.22832, 2025.  [https://arxiv.org/abs/2511.22832](https://arxiv.org/abs/2511.22832)
