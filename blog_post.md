@@ -1,5 +1,11 @@
 # I Pitted an LLM Against Senzing for Agentic Entity Resolution.  And Whew.
 
+## Bottom Line Up Front
+
+Senzing beat Claude Opus 4.7 on every metric that matters for entity resolution (time, cost, and accuracy), and the gap widened as the dataset grew.  Senzing resolved a full 92,175-record dataset in about two minutes at zero marginal cost; the LLM needed 7+ minutes on just 10,000 records, cost roughly $10 per run, and topped out at an F1 of 0.88 against Senzing's results, dropping as low as 0.29 by 10,000 records.  If you are building a production ER pipeline at any meaningful scale, you will not get there with  AI on its own.  You need to use a purpose-built ER engine.  The rest of this post shows the work.
+
+## Introduction
+
 Okay so here's the deal.  I've been spending a lot of time lately poking at where LLMs actually earn their keep and where they're just expensive vibes in a trenchcoat.  Entity resolution (ER) felt like a fair fight on paper...take a pile of records about people, figure out which ones refer to the same human, merge accordingly.  LLMs are supposedly great at fuzzy text matching.  Senzing is a purpose-built ER engine that's been doing this for years.  Let the bake-off begin.
 
 Of course, others have tried entity resolution with LLMs before and gotten mixed results.  However, they notably relied heavily on customizing the data, the prompt, or both [\[1-4\]](#references).  What's different about this experiment is that I didn't reshape the data or hand-engineer a prompt to the benchmark...the LLM got the same JSONL records Senzing got (just converted to CSV for token efficiency).  That makes this less "how high can the LLM score with the right prompt" and more "how does a general-purpose LLM compare to a purpose-built engine when you drop them into the same pipeline slot."
