@@ -78,7 +78,7 @@ Senzing on the full 92,175-record dataset finishes in just over two minutes.  Tw
 
 This wasn't even close.  Senzing's curve barely moves while the LLM curves climb the wall.
 
-A quick notes on the fits used in this plot and subsequent ones.  I am not making any claims on what is the correct type of equation to fit the data.  In log-log plots the power law can make sense and I use that equation type frequently for the fits in this post.  However, in some cases like this one it is instructive to break out of that because the data in the smaller record numbers seems to be of a different slope on a log-log plot.  So don't take the provided equations as gospel.  I am just using them to illustrate a reasonable fit where we actually have measurements and then to provide you an idea of what would happen if we extrapolate all the way out to 100M records.
+**A quick notes on the fits used in this plot and subsequent ones:**  I am not making any claims on what is the correct type of equation to fit the data.  In log-log plots the power law can make sense and I use that equation type frequently for the fits in this post.  However, in some cases like this one it is instructive to break out of that because the data in the smaller record numbers seems to be of a different slope on a log-log plot.  So don't take the provided equations as gospel.  I am just using them to illustrate a reasonable fit where we actually have measurements and then to provide you an idea of what would happen if we extrapolate all the way out to 100M records.
 
 ### Cost
 
