@@ -60,13 +60,11 @@ And critically, both approaches saw the exact same input data as Senzing did at 
 
 Here's the headline figure.  Four panels...time, cost, total tokens used, and number of records merged.  All on log-log scales because the dynamic range gets wild fast.
 
-![Senzing vs LLM scaling across time, cost, tokens, and merges](data/figures/tokenomics_results.jpg)
-
-![Test Figure](data/figures/timing_figure.svg)
-
 Let me walk through what jumped out.
 
 ### Time
+
+<img src="data/figures/timing_figure.png" alt="Time Required to Do ER" width="600">
 
 | Records | Senzing | LLM batched fast | LLM blocked |
 |---:|---:|---:|---:|
@@ -76,11 +74,15 @@ Let me walk through what jumped out.
 | 10,000 | 69.43 s | 434.3 s | 512.3 s |
 | 92,175 (full) | 131.47 s | (extrapolated, hours) | (extrapolated, hours) |
 
-Senzing on the full 92,175-record dataset finishes in just over two minutes.  Two minutes for the whole thing, meaning two minutes to load the data, resolve the entities, and write the results to the PostGreSQL database.  The LLM at 10,000 records (about 11% of the data) is taking over seven minutes in the fast variant and over eight in the blocked variant.  Extrapolated out to the full dataset, you're looking at hours...if it would even complete at all.  Those extrapolated curves are the faded lines you see climbing off the top of the time chart.
+Senzing on the full 92,175-record dataset finishes in just over two minutes.  Two minutes for the whole thing, meaning two minutes to load the data, resolve the entities, and write the results to the PostGreSQL database.  The LLM at 10,000 records (about 11% of the data) is taking over seven minutes in the fast variant and over eight in the blocked variant.  Extrapolated out to the full dataset, you're looking at hours...if it would even complete at all. 
 
 This wasn't even close.  Senzing's curve barely moves while the LLM curves climb the wall.
 
+A quick notes on the fits used in this plot and subsequent ones.  I am not making any claims on what is the correct type of equation to fit the data.  In log-log plots the power law can make sense and I use that equation type frequently for the fits in this post.  However, in some cases like this one it is instructive to break out of that because the data in the smaller record numbers seems to be of a different slope on a log-log plot.  So don't take the provided equations as gospel.  I am just using them to illustrate a reasonable fit where we actually have measurements and then to provide you an idea of what would happen if we extrapolate all the way out to 100M records.
+
 ### Cost
+
+<img src="data/figures/cost_figure.png" alt="Total Cost of ER" width="600">
 
 | Records | LLM batched fast | LLM blocked |
 |---:|---:|---:|
@@ -95,6 +97,8 @@ Ten dollars to process 10,000 records, and roughly half a dollar to process 500,
 
 ### Tokens
 
+<img src="data/figures/tokens_figure.png" alt="Number of Tokens Used for ER" width="600">
+
 | Records | LLM batched fast | LLM blocked |
 |---:|---:|---:|
 | 500 | 86,750 | 97,150 |
@@ -107,6 +111,8 @@ The LLM burned through nearly two million tokens at 10,000 records, with the two
 Senzing of course uses zero tokens because it isn't a language model.  This panel is mostly here to show that the cost numbers above aren't some weird pricing artifact...the LLM really is doing nearly two million tokens of work to do what Senzing does in a fraction of the time at no marginal cost beyond the license fee (i.e. free for a non-prod trial license).
 
 ### Records Merged
+
+<img src="data/figures/merged_figure.png" alt="Number of Records Merged" width="600">
 
 | Records | Senzing | LLM batched fast | LLM blocked |
 |---:|---:|---:|---:|
