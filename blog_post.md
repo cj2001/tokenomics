@@ -62,6 +62,8 @@ Here's the headline figure.  Four panels...time, cost, total tokens used, and nu
 
 ![Senzing vs LLM scaling across time, cost, tokens, and merges](data/figures/tokenomics_results.jpg)
 
+![Test Figure](data/figures/timing_figure.svg)
+
 Let me walk through what jumped out.
 
 ### Time
