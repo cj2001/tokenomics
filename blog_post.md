@@ -2,7 +2,9 @@
 
 ## Bottom Line Up Front
 
-Senzing beat Claude Opus 4.7 on every metric that matters for entity resolution (time, cost, and accuracy), and the gap widened as the dataset grew.  Senzing resolved a full 92,175-record dataset in about two minutes at zero marginal cost; the LLM needed 7+ minutes on just 10,000 records, cost roughly $10 per run, and topped out at an F1 of 0.88 against Senzing's results, dropping as low as 0.29 by 10,000 records.  If you are building a production ER pipeline at any meaningful scale, you will not get there with  AI on its own.  You need to use a purpose-built ER engine.  The rest of this post shows the work.
+Senzing beat Claude Opus 4.7 on every metric that matters for entity resolution (time, cost, and accuracy), and the gap widened as the dataset grew.  Senzing resolved a full 92,175-record dataset in about two minutes at zero marginal cost; the LLM needed 7+ minutes on just 10,000 records, cost roughly $10 per run, and topped out at an F1 of 0.88 against Senzing's results, dropping as low as 0.29 by 10,000 records.  If you take the results shown here and do some back-of-the-envelope calculations to scale them out to typical datasets that are on the order of 100M records, you are looking at costing **$10,000 - $100,000 in LLM credits per run and it would take over 300 _years_ to complete!**   
+
+If you are building a production ER pipeline at any meaningful scale, you will not get there with  AI on its own.  You need to use a purpose-built ER engine.  The rest of this post shows the work.
 
 ## Introduction
 
