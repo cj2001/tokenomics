@@ -180,7 +180,7 @@ The false negatives are interesting too.  At 10,000 records the blocked variant 
 
 Here's what the whole experiment told me.
 
-**The LLM scales badly.**  Not just on cost and time, which I expected, but on accuracy, which I did not expect to anywhere near this degree.  Senzing's merge-count line is a clean diagonal all the way out to 92,175 records and roughly 5,931 merged records.  The LLM lines stop at 10,000 records, and the extrapolation is not encouraging given that F1 was already trending downward in the blocked variant and bouncing chaotically in the fast variant.
+**The LLM scales badly.**  Not just on cost and time, which I expected, but on accuracy.  I expect the LLM approach to be pretty inaccurate, but I didn't expect it to be this bad.  Senzing's merge-count line is a clean diagonal all the way out to 92,175 records and roughly 5,931 merged records.  The LLM lines stop at 10,000 records, and the extrapolation is not encouraging given that F1 was already trending downward in the blocked variant and bouncing chaotically in the fast variant.
 
 **The fast variant is essentially unusable above a few thousand records.**  Whatever's happening internally, the result is that I had to re-run the 5,000-record case three times to convince myself the single-merge result was real and not a glitch.  When you're hitting "rerun the experiment several times at significant cost to make sure I didn't break it" territory, you've left production-grade behavior behind.
 
