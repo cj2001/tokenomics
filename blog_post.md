@@ -184,7 +184,7 @@ Here's what the whole experiment told me.
 
 **The fast variant is essentially unusable above a few thousand records.**  Whatever's happening internally, the result is that I had to re-run the 5,000-record case three times to convince myself the single-merge result was real and not a glitch.  When you're hitting "rerun the experiment several times at significant cost to make sure I didn't break it" territory, you've left production-grade behavior behind.
 
-**The blocked variant is better but still not in Senzing's neighborhood.**  Better blocking gets you to F1 around 0.75 to 0.88, which is fine for some use cases but not for anything where the merge quality has real downstream consequences.  And you're paying $10 per 10,000 records to get there, while a system you already own does it correctly in seconds.
+**The blocked variant is better but still not in Senzing's neighborhood.**  Better blocking gets you to F1 around 0.75 to 0.88, which is fine for some use cases but not for anything where the merge quality has real downstream consequences.  And you're paying $10 per 10,000 records to get there, whereas you get much better results with a purpose-built system in seconds.
 
 **The cost-per-correct-merge is brutal.**  At 10,000 records, the blocked LLM cost about $10.14 and produced roughly 70 true-positive merges (out of 101 total).  That's roughly $0.14 per correct merge.  Senzing produced 89 correct merges in 69 seconds at zero marginal cost.  Multiply that out to production scale and the math gets uglier the bigger the dataset gets.
 
