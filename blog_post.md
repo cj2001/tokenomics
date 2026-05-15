@@ -38,7 +38,7 @@ But under that thin shell, a real Senzing export carries a lot more freight that
 * The full original record payload (`JSON_DATA`) for every record in the entity.
 * `INTERNAL_ID`, `MATCH_LEVEL`, `MATCH_LEVEL_CODE`, `MATCH_KEY_DETAILS`, and `FEATURE_SCORES` on each record.
 * `ECCLASSIFICATIONS`, `ENTITY_NAME_DETAILS`, and `BEST_NAME` on each entity.
-* Richer `RELATED_ENTITIES` entries that include `MATCH_LEVEL`, `IS_DISCLOSED`, `IS_AMBIGUOUS`, and friends.  The LLM version only writes `ENTITY_ID`, `MATCH_LEVEL_CODE`, and `MATCH_KEY`.
+* Richer `RELATED_ENTITIES` entries that include `MATCH_LEVEL`, `IS_DISCLOSED`, `IS_AMBIGUOUS`, and a handful of other fields.  The LLM version only writes `ENTITY_ID`, `MATCH_LEVEL_CODE`, and `MATCH_KEY`.
 
 So what the LLM produces is "compatible enough for the scoring scripts" rather than "drop-in interchangeable with a Senzing export."  If you tried to feed an LLM-output JSONL into a downstream tool that expected Senzing's full schema (something like `sz_explorer`, or anything that reads the FEATURES or JSON_DATA blocks), it would break.  This isn't a knock on the LLM exactly...I didn't ask it to fabricate feature scores or match levels, because those might just be hallucinations dressed up as engineering.  But it's worth flagging that the shape of the output is matching the easy outer layer, and the parts that real downstream tooling actually depends on aren't there.
 
