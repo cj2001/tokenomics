@@ -130,6 +130,52 @@ I'm honestly not sure what's going on inside the LLM at exactly 5,000 records th
 
 By contrast, the blocked variant tracks Senzing more closely.  It actually slightly over-merges relative to Senzing at 10,000 records (101 vs 89), but as you'll see in a second, "more merges" is not the same thing as "correct merges."
 
+## Accuracy is Where Things Get Painful
+
+Counting merges is one thing.  Knowing whether you got them right is another.  I scored both LLM variants against Senzing's results using standard pairwise precision, recall, and F1.
+
+A quick word on what those mean here, because this matters for interpreting the numbers.  In this experiment, I am treating **Senzing's merges as the ground truth**.  That's the yardstick I'm measuring against.  Given that:
+
+* **Precision** answers the question "of the merges the LLM proposed, what fraction match what Senzing found?"  High precision means the LLM isn't making stuff up.
+* **Recall** answers the question "of the merges Senzing found, what fraction did the LLM also find?"  High recall means the LLM isn't missing the matches Senzing knows are there.
+* **F1** is the harmonic mean of the two.  It rewards being good at both at once and punishes being lopsided.
+
+A perfect score across the board means the LLM agrees with Senzing on every merge.  Lower precision means false positives (the LLM merged things that shouldn't be merged).  Lower recall means false negatives (the LLM missed merges Senzing caught).
+
+### Fast variant pairwise quality
+
+| Records | Precision | Recall | F1 |
+|---:|---:|---:|---:|
+| 500 | 1.00 | 1.00 | 1.00 |
+| 2,500 | 0.62 | 1.00 | 0.76 |
+| 5,000 | 0.00 | 0.00 | 0.00 |
+| 10,000 | 0.56 | 0.19 | 0.29 |
+
+This shows that the fast variant is sort of fine on _tiny_ datasets and falls apart everywhere else.
+
+At 500 records it nails everything because there's basically only one merge to find and it found it.  At 2,500 records recall is still perfect (the LLM found every merge Senzing found) but precision dropped to 0.62, meaning roughly 38% of the merges it proposed were spurious.  Then 5,000 records is the bizarre row I described above, where the one merge it produced happened to be wrong, dragging F1 to zero.  Because that 5,000-record point is anomalous in a way I can't explain, it's more honest to read the trend by comparing the 2,500 and 10,000 endpoints and treating the middle as a known weird artifact.  Doing that, recall went from 1.00 down to 0.19, meaning the LLM went from finding every merge Senzing found to missing more than 80% of them.  F1 went from 0.76 to 0.29.  Precision drifted around in the 0.5 to 0.6 range across both endpoints, so call that flat-ish at "roughly half of the merges proposed are real."  The headline pattern is that as the data gets bigger, the fast variant's recall is collapsing and its precision isn't getting better fast enough to compensate.
+
+The pattern here is erratic in a way that's hard to forgive.  You can sometimes work around a system that's consistently wrong in a known direction.  You can't really work around a system whose accuracy lurches around in unpredictable ways as the inputs grow.  Imagine trying to build a downstream pipeline on top of this where you have to explain to a stakeholder why the merge counts dropped 90% because somebody added a few hundred more records to the input.  Yeah...no thanks.
+
+### Blocked variant pairwise quality
+
+| Records | Precision | Recall | F1 |
+|---:|---:|---:|---:|
+| 500 | 1.00 | 1.00 | 1.00 |
+| 2,500 | 0.73 | 1.00 | 0.84 |
+| 5,000 | 0.78 | 1.00 | 0.88 |
+| 10,000 | 0.69 | 0.82 | 0.75 |
+
+The blocked approach holds up much more sensibly as the data grows.  As hypothesized, the ER results are slightly better than the fast approach since we are forcing similar names to all be in the same batch.  Recall stays at 1.0 all the way through 5,000 records, meaning the LLM caught every single merge Senzing found at those sizes.  Then at 10,000 records recall slips to 0.82, meaning the LLM started missing roughly one in five real merges.
+
+Precision is more interesting.  It hovers around 0.7 to 0.78 across all the larger sizes and never gets close to perfect.  Translating that...about a quarter to a third of the merges the LLM is proposing are wrong.  And these aren't random errors either.  Looking at the false positives, they tend to be cases where two records share an obvious surface match (same name, same employer) but Senzing has flagged them as different people based on disambiguating signals like a different address or a different date of birth.  The LLM sees the surface similarity, doesn't weight the disambiguating fields the same way, and merges anyway.
+
+What this tells me is that the blocked LLM is operating roughly the way an over-eager human reviewer would.  It catches the obvious stuff at small scale, starts making confident-but-wrong calls as the data grows, and at scale it both adds spurious merges and starts missing real ones.  At 10,000 records you've got a system that's correct on roughly three out of four merges and finds roughly four out of five it should.  That's an F1 of 0.75.  Some applications can tolerate that.  Anything where false positives or false negatives carry real consequences (think things like legal matters, compliance, voter registration, fraud detection, healthcare records, anti-money-laundering, etc.) cannot.
+
+### Where the LLM falls short on recall
+
+The false negatives are interesting too.  At 10,000 records the blocked variant misses things like "Troy Guerrette" vs "Troy Guerette," "Steve Griggs" vs "Stephen Griggs," "Dawn Grey" vs "Dawn Gray."  These are exactly the kinds of fuzzy matches you'd think LLMs would crush, because they're the same kind of fuzzy matches humans easily catch.  It is worth being upfront about one thing here, though.  I didn't add any explicit phonetic matching, nickname expansion, or spelling-variant logic to the LLM pipeline, so the model is leaning entirely on its general reasoning to bridge "Steve" and "Stephen" or "Grey" and "Gray."  Senzing caught these in the same dataset.  The LLM pipeline didn't.  That's the observation.
+
 ## The Bigger Story
 
 Here's what the whole experiment told me.
