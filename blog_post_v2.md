@@ -1,0 +1,4 @@
+# I Pitted an LLM Against Senzing for Agentic Entity Resolution.  And Whew.
+
+I set out to compare an LLM against Senzing on entity resolution (ER).  I was originally thinking that accuracy is the obvious thing to fight over, and there's a real fight there.  However, as I discovered through experimentation, it is a complicated and nuanced discussion that deserves its own blog post after the initial discussions on how to actually _do_ ER with an LLM are had.  So for this post I wanted to focus just on that initial part: the mechanics of using an LLM for ER.  Even more than that though, the surprise is that you don't need the accuracy argument at all.  What I found by actually doing ER with an LLM in terms of cost and time was so convincing that accuracy didn't even matter.  And those morgins only widen as the data grows for reasons that cannot be fixed by just using a better or bigger LLM.  
+
