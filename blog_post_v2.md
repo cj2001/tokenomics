@@ -2,13 +2,11 @@
 
 ## Tl;Dr
 
-*** Reword this paragraph
-
-And the per-pass cost is steep before you even get to that.  Senzing resolved the full 92,175-record dataset in about two minutes at zero marginal cost.  The LLM needed 7+ minutes on 10,000 records — roughly 11% of the data — at about $10 a run, and that's using the best model available, because every cheaper option did worse.  Scale to the 100M-record datasets people actually run in production and a single pass runs into six figures of API spend.  You can parallelize the wall-clock down, but you can't parallelize away the token bill, or the size of the fleet you'd need to do it fast.
+I pitted an LLM against Senzing on entity resolution, and the thing fell apart on cost and time alone.  Senzing resolved all 92,175 records in about two minutes at basically zero marginal cost, while the LLM needed six-plus minutes on just 10% of that data at around $10 a run...and that gap only widens as the data grows.  Worse, once you see how it all comes together it will be clear that the only way to dodge that cost is to build the stateful guts of an ER engine yourself, at which point the LLM is just the priciest seat in a car you had to build anyway.  And none of it gets fixed by a bigger or smarter model...it's structural.
 
 ## Introduction
 
-Okay so here's the deal.  I've been spending a lot of time lately poking at where LLMs actually earn their keep and where they're just expensive vibes in a trenchcoat.  Entity resolution (ER) felt like a fair fight on paper...take a pile of records about people, figure out which ones refer to the same human, merge accordingly.  LLMs are supposedly great at fuzzy text matching.  Senzing is a purpose-built ER engine that's been doing this for years.  Let the bake-off begin.
+I've been spending a lot of time lately poking at where LLMs actually earn their keep and where they're just expensive vibes in a trenchcoat.  Entity resolution (ER) felt like a fair fight on paper...take a pile of records about people, figure out which ones refer to the same human, merge accordingly.  LLMs are supposedly great at fuzzy text matching.  Senzing is a purpose-built ER engine that's been doing this for years.  Let the bake-off begin.
 
 Of course, others have tried entity resolution with LLMs before and gotten mixed results.  However, they notably relied heavily on customizing the data, the prompt, or both [\[1-4\]](#references).  What's different about this experiment is that I didn't reshape the data or hand-engineer a prompt to the benchmark...the LLM got the same JSONL records Senzing got (just converted to CSV for token efficiency).  That makes this less "how high can the LLM score with the right prompt" and more "how does a general-purpose LLM compare to a purpose-built engine when you drop them into the same pipeline slot."
 
@@ -94,7 +92,7 @@ Let me walk through what jumped out.
 
 Senzing on the full 92,175-record dataset finishes in just over two minutes.  Two minutes for the whole thing: load the data, resolve the entities, and write the results to PostgreSQL!  Meanwhile the LLM, at 10,000 records (which is about 11% of the data) is taking over six minutes in the fast variant and over eight in the blocked variant.
 
-Let me be straight about the extrapolation.  I'm not handing you a magic equation.  There are a ton of different equations you could use to fit this data.  The smaller record counts clearly sit on a different slope, and you shouldn't treat any fitted curve as gospel.
+Let me be straight about the extrapolation.  I'm not handing you a magic equation.  There are a ton of different equations you could use to fit this data.  The smaller record counts clearly sit on a different slope, and you shouldn't treat any fitted curve as gospel.  But the point is obvious: when you roughly extrapolate out to datasets that are typical production scale, you are looking at many _years_ of runtime.
 
 But here's the thing...you don't actually need the curve.  You just need the mechanism, and once you see it, you'll get why the slope HAS to steepen.
 
@@ -121,7 +119,7 @@ Senzing's curve barely moves while the LLM curves climb the wall.
 
 Senzing isn't on this chart because Senzing's marginal cost basically isn't there.  You need a license file to run it, so it's not strictly free, but "every run costs you tokens" isn't how it works.  Once you're licensed, the marginal cost of running on more records is just CPU time on a machine you already own.  And Senzing offers a [free non-production evaluation license](https://senzing.com/request-non-prod-license/) you can use to duplicate this experiment yourself.  So for testing, prototyping, and benchmarking like I was doing here, the cost difference is genuinely zero versus ten dollars per 10,000 records.
 
-What my experiments showed was that it cost about ten dollars to process 10,000 records.  This is a pretty steep investment for a really small amount of data!  Extrapolated to the full 92,175 the LLM lands somewhere around $90–$100 per run.  *Per run.*  And sure, you wouldn't re-run the whole corpus constantly when a single new record arrives.  You would resolve it once, persist the results, and manage those new records on arrival.  But that is exactly where "just use an LLM" quietly stops being true, which is the rest of this post.
+What my experiments showed was that it cost about ten dollars to process 10,000 records.  This is a pretty steep investment for a really small amount of data!  Extrapolated to the full 92,175 the LLM lands somewhere around $90–$100 per run.  *Per run.*  And sure, you wouldn't re-run the whole corpus constantly when a single new record arrives.  You would resolve it once, persist the results, and manage those new records on arrival.  But that is exactly where "just use an LLM" quietly stops being true, which is the rest of this post.  And again, I included the extrpolation out to typical production scale sizes and you are looking at tens of thousands of dollars per run, or more, which is just not a sustainable cost model.
 
 ### Tokens
 
@@ -138,7 +136,60 @@ The LLM burned through nearly two million tokens at 10,000 records, with the two
 
 And it's a moving target.  These are Opus 4.8 counts, and per Anthropic's own notes the updated tokenizer maps the same input to roughly 1.0–1.35× the tokens that Opus 4.6 used at the same per-token price (independent measurements often land higher).  So "the same job" quietly got more expensive with a version bump, which is its own argument against building your cost model on top of token economics you don't control.
 
+### Records Merged
 
+<img src="data/figures/merged_figure.png" alt="Number of Records Merged" width="600">
+
+| Records | Merges found by Senzing |
+|---:|---:|
+| 500 | 1 |
+| 2,500 | 8 |
+| 5,000 | 28 |
+| 10,000 | 89 |
+| 92,175 | 5,931 |
+
+There's one number here worth stopping on, and it's not an LLM versus Senzing thing...it's a why-do-ER-at-all thing.
+
+Watch what happens to the share of records that turn out to be duplicates as the dataset grows.  At 500 records it's about 0.2%.  At 92,175 it's 6.4%.  And it's still climbing!  That's not noise, that's the nature of the beast.
+
+Here's why.  The more data you've piled up, the more likely any given record is a duplicate of something already sitting in there.  Duplicates get found by comparing a record against everything you already know.  So the bigger your "everything you already know" gets, the more chances each new record has to match something.
+
+Which, honestly, is both the entire case for doing ER in the first place AND a sneak peek at the next section.  The right architecture holds onto what it has already resolved and checks every new arrival against it.  A one-shot batch pass over a frozen snapshot like what is happening in the LLM-based approaches is the exact opposite of that.
+
+## Back to Our Analogy: Does the Car Survive the Road?
+
+Everything I showed above is the cost of resolving the data once.  In the real world you'd never redo all that work for every new record.  You would do it incrementally, persisting what you already resolved and only deal with the new arrivals.  But watch what that actually requires, because this is where the "just use an LLM" story falls apart...and none of it gets fixed by a bigger or smarter model.
+
+**To do this incrementally is like building the whole car and the LLM is a really pricey seat in it.**  Persisting your groupings and blocking new records against them is the right call.  But look at what it takes to do it.  You first need a store of *resolved entities*.  These are not raw records.  They are entities that have accreted features across many records, so they know things no single record does.  You also need an index to block new records against and a process that fixes neighboring entities when a new record merges or splits them.  That is the stateful core of an ER engine, and in the LLM world you have to _build all of it yourself._  Do that, and the LLM isn't "the solution" anymore.  It is a scorer dropped into one seat of a full car you built.  And it is the most expensive possible way to fill that seat: tokens and latency on every single comparison, where a principled engine spends almost nothing and gives you the same answer every time.  So reaching for an LLM didn't save you from building ER at all.  It mostly just made the cheapest step in the process the expensive one.
+
+**And your blocking is a cost the LLM can't absorb either.**  Suppose every record is just name, address, and date of birth.  Then one embedding per record and a vector search is truly easy and effective.  But real data is never that tidy.  The moment records get varied, you've got a problem.  Picture a person or business with multiple addresses, missing fields, a handful of different names, several phones, a few employers.  Now you have to actually decide which fields and which combinations to embed.  Because a single whole-record vector just blurs everything together and starts matching on the wrong things.  And if you want relationships like finding people who share an address, you need a separate embedding per address on every record, then another scheme for phones, and so on.  That combinatorial design problem is yours to solve, by hand, and to redo whenever the data shifts.  On top of it, good blocking depends on the statistics of your data.  This includes things like which names are common in your data (which varies by locale) that tells you which value combinations are rare enough to discriminate on.  This is not something LLM's with their internet-scale training know.  Senzing generates those statistics and candidate keys automatically, across features, value combinations, and the multiple values within a record, and learns from your data which ones actually discriminate.  The "just throw it at an LLM" pitch quietly requires you to build the data-aware blocking layer of an ER engine before the LLM resolves a single record.
+
+So the time-and-cost story was never really "the LLM is a little slower and pricier."  It's that you end up stuck between two bad options.  You can either pay the full price resolving the complete data set each time you need ER or you can build the whole stateful engine so you don't have to pay that price more than once.  Then you  realize the LLM was never saving you the hard part anyway.  
+
+And we haven't even had the conversation about the accuracy of the LLM at doing ER.  But we will save that as a post for another day.
+
+## Where an LLM Is Actually Great at This
+
+None of this means embeddings and LLMs are useless for ER work.  There are genuinely good uses, and they're the parts of the stack the LLM is actually shaped for:
+
+* **Schema alignment.**  Bringing a new dataset into your system can be a messy process.  Understanding how different columns are mapped into an existing ER system can be a challenge, like "is `cust_dob` the same as `birth_date`?"  But this is exactly the fuzzy-semantic problem LLMs are great at.  It's a one-time configuration task, not a per-record pipeline.  Senzing's MCP server exposes this directly: an LLM can walk a guided workflow to map source data to the entity specification without ever sending the data to Senzing or even touching the SDK.
+
+* **Candidate generation, AKA the blocking step itself.**  Remember that mandatory step from the setup where we narrowed the field down to the records actually worth comparing?  This is the one spot in the whole ER stack where embeddings genuinely earn their keep.  But only for generating candidates...never for scoring the matches.  Here's when they help.  Most of the time, your typed keys pick out those candidates just fine.  But every so often they miss, usually on messy free-text fields where an exact-match key has nothing to grab onto.  That's where embeddings step in and catch what your keys missed.  Senzing v4 actually lets you wire this up...you can set up a feature built from embeddings that does nothing but help surface candidates, while the real engine still handles every actual matching decision.
+But hear me on this.  It's a bonus, not a freebie.  Embeddings are slower than a plain key lookup, and they won't always give you the same answer twice, where a plain key lookup will.  So they belong stacked on top of your typed keys as a little extra insurance...not swapped in to replace them.
+
+* **Field synthesis after resolution.**  Once entities are resolved, LLMs are excellent at summarizing and reconciling free-text fields across the source records.  Genuinely useful, low-risk work.
+
+* **Low-stakes, small-batch dedup.**  A single-pass merge over a few thousand entities extracted from a few hundred documents?  Go for it, an LLM is a fine choice.  It's just not the same problem as production ER.
+
+The structural argument isn't against semantic methods.  It's against swapping them in for the part of the stack — typed candidate generation, principle-based decisioning, real-time learning, deterministic explanations — they can't represent at all.
+
+## What I'd Tell Someone Considering This
+
+If you're building an ER pipeline and you're seriously considering "just use an LLM," I'd push back.  It's still the wrong tool for the job: the one-pass cost is brutal at scale, and the only way to avoid paying it again and again is to build the stateful engine (store, blocking, cascade) that the LLM can't be.  So at that point the LLM is just an expensive scorer you didn't need that will just not work at production scale.
+
+If you're prototyping on a small dataset (say, under 1,000 records) and you want a quick-and-dirty merge pass, sure, an LLM might be fun, albeit expensive.  But the moment you're talking about production data, streaming updates, or a dataset that grows, the numbers aren't close.  Not even a little.
+
+I came into this willing to be impressed by the LLM.  I came out impressed by Senzing instead.  Back to our car analogy, the LLM was the shiny seat that cost a lot of money but didn't really make the car go.  It was the car of the future that didn't really drive.  But what I needed was a car that worked.  And Senzing just quietly and inexpensively did the work.
 
 ---
 ## Acknowledgements
