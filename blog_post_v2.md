@@ -32,7 +32,7 @@ I picked two of them...the **Equifax B2BConnect** dataset (firmographic and cont
 
 I ran Senzing on bare metal with PostgreSQL as the backing store, using the Senzing SDK.  For the LLM side, I used Claude Opus 4.8 and prompted it to behave like an ER engine and emit results in the same Senzing JSONL format.  Same input, same expected output, totally different machinery.
 
-I tested both pipelines at four sample sizes of the dataset, distributed statistically between the two as they are in the complete dataset.  The sample sizes were 500 records, 2,500, 5,000, and 10,000.  Going bigger than 10,000 with the LLM started getting silly on cost and time, so for the full 92,175 I extrapolated mathematically and ran Senzing on the actual file for comparison.
+I tested both pipelines at four sample sizes of the dataset, distributed statistically between the two as they are in the complete dataset.  The sample sizes were 500 records, 2,500, 5,000, and 10,000.  Going bigger than 10,000 with the LLM started getting silly on cost and time, so for the full 92,175 I extrapolated mathematically and ran Senzing on the actual file for comparison.  For all three approachs (the two LLM variants and Senzing) I further extrapolated out into the 100M data size, which just gives a real rough ballpark idea on what it would look like to scale these results out to production scale.
 
 ### A note on the LLM's output format
 
