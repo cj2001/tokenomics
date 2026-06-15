@@ -56,6 +56,90 @@ But under that thin shell, a real Senzing export carries a lot more freight that
 
 So what the LLM produces is "compatible enough for the scoring scripts" rather than "drop-in interchangeable with a Senzing export."  However, if you feed an LLM-output JSONL into a downstream tool that expects Senzing's full schema (something like `sz_explorer`, or anything that reads the FEATURES or JSON_DATA blocks), it breaks.  This isn't a knock on the LLM exactly.  I didn't ask it to fabricate feature scores or match levels, because those would just be hallucinations dressed up as engineering.  What the LLM _does_ do is match the easy outer layer of the schema cheaply.  But this leaves the evidence and scores that a real ER engine produces, a byproduct of the ER decision making undone.  And that difference between "looks like the output" and "did the work" is an important distinction!
 
+### The two LLM approaches
+
+One quick note before I get into the chunking strategies.  The CORDs ship as Senzing-format JSONL, which is great for Senzing because that's literally what it eats.  For the LLM, though, JSON is wildly token-inefficient.  Every field name gets repeated on every record, every quote and brace and colon eats tokens, and you end up paying to serialize syntax instead of data.  So before any of this hit the LLM, I converted the input from JSONL to CSV.  Same fields, same values, but the column headers appear once at the top instead of once per record, and the structural overhead drops dramatically.  In my testing this cut input tokens by roughly 30% compared to sending the raw JSONL through, which directly translates into faster runs and lower bills.  Senzing got the original JSONL because that's its native format.  The LLM got the CSV-converted version of the exact same records.
+
+The next problem I encountered was that I couldn't send all of the data to the LLM at once because of the limits imposed by Anthropic.  First, you need to think about the context window.  Claude Opus 4.8, used in this post, can take a lot of tokens as input in one shot, but not thousands of records plus a prompt.  Then there is the rate-limit and per-request token-cap.  Anthropic enforces celinings on these so even if you can fit all of your data within the context window, you are not allowed to fire it all at once at the API.  So I needed to break the data into cheunks.  For this article, I trief two different approaches for the chunking.  And, not surprisingly, how you build the chunks turns out to matter a lot.
+
+The first approach, which I named the **batched fast** approach, fills its chunks by taking records from each data source in roughly the order they came in and rotating between sources.  The goal is throughput.  Which specific records end up together in a chunk is essentially arbitrary, dictated more by file ordering than by content.
+
+The **blocked** approach builds its chunks deliberately.  Records are grouped by the first few letters of the last name (I used four), so that anyone who might be a duplicate of someone else (every "GRIGGS," every "COHEN," every "ASHWORTH") ends up in the same chunk before being sent to the model.  The specific key doesn't matter — it's just a proxy to get sane block sizes.  Note that there are a ton of different ways that this could be done and I just created a real simple one.  I will say more about this below.
+
+This distinction matters because I theorized that the LLM can only merge two records when it sees them side by side in the same chunk.  If two duplicates land in different chunks, the fast approach might not have the chance to spot them.  The blocked approach is engineered so that they almost always do.
+
+Now let's talk about the same concept from the ER side of the house.  The thing every ER person treats as table stakes is blocking (AKA candidate generation).  Here's the problem it solves.  You can't compare every record to every other record at scale.  That's the O(n²) wall that has always defined ER, and it's brutal.  So every real ER pipeline starts by narrowing the field down to just the records actually worth comparing.  You can do it a bunch of ways...typed keys, blocking on a single field, semantic or vector search, whatever fits your data.  Senzing does it with principled candidate keys.
+
+For the LLM, the chunking IS the blocking.  Think about it...deciding which records should be sent to the LLM at the same time, such as in the blocked approach I described above, is the exact same decision as deciding which records get compared, because the model can only ever merge two records it actually sees together.  Same move, different name.
+
+The bottom line here is that both the LLM approach and the Senzing approach require blocking first.  And it is important to know that good blocking isn't free, which is crucial at scale.  Block on surname and the bucket for common names starts to balloon as your corpus grows.  Every SMITH, every GARCIA...those dense regions of identity space spit out blocks of thousands, not dozens.  So the records the model has to chew through per block keep getting bigger over time, and that's for a reason that has nothing to do with how good the model is.  It is just a fact of life: some individual blocks can get really big and this could confuse or even hit the rate limits on the LLM.  And then the interest question is what happens to those big blocks once you have surfaced them.
+
+And critically, both LLM approaches saw the exact same input data as Senzing did at each sample size.  Same 500 records.  Same 2,500.  Same 5,000.  Same 10,000.  Apples-to-apples, all the way down.
+
+## What the Numbers Said: Does the Car Move?
+
+Here's the headline figure.  Four panels...time, cost, total tokens used, and number of records merged.  All on log-log scales because the dynamic range gets wild fast.
+
+Let me walk through what jumped out.
+
+<img src="data/figures/timing_figure.png" alt="Time Required to Do ER" width="600">
+
+| Records | Senzing | LLM batched fast | LLM blocked |
+|---:|---:|---:|---:|
+| 500 | 2.99 s | 6.1 s | 111 s |
+| 2,500 | 20.77 s | 29 s | 93 s |
+| 5,000 | 31.96 s | 130 s | 207 s |
+| 10,000 | 69.43 s | 371 s | 501 s |
+| 92,175 (full) | 131.47 s | (extrapolated, hours) | (extrapolated, hours) |
+
+Senzing on the full 92,175-record dataset finishes in just over two minutes.  Two minutes for the whole thing: load the data, resolve the entities, and write the results to PostgreSQL!  Meanwhile the LLM, at 10,000 records (which is about 11% of the data) is taking over six minutes in the fast variant and over eight in the blocked variant.
+
+Let me be straight about the extrapolation.  I'm not handing you a magic equation.  There are a ton of different equations you could use to fit this data.  The smaller record counts clearly sit on a different slope, and you shouldn't treat any fitted curve as gospel.
+
+But here's the thing...you don't actually need the curve.  You just need the mechanism, and once you see it, you'll get why the slope HAS to steepen.
+
+Let's start with what blocking does for you.  It's the only reason ER is tractable in the first place...it stops you from comparing all 92,175 records against each other.  Huge win.  But inside a single block, finding every duplicate STILL means weighing every record against every other record in that block.  And that work is quadratic in the block's size.  Double the records in a chunk and you roughly quadruple the comparison work, while only doubling the tokens you're paying for.  This is the part people miss when they get excited about bigger context windows...a bigger window is a bigger box, not a faster engine.  More room to stuff records in doesn't make the comparisons inside any cheaper.
+
+And here's the kicker, the part blocking does NOT rescue you from.  As the corpus grows, the blocks for common names grow right along with it.  Every SMITH, every GARCIA like we discussed before.  So your most expensive blocks get more expensive faster than the dataset as a whole does.
+
+That's the wall the timing curve is climbing.  And it's exactly why "just use a model with a 10M-token window" makes the economics worse, not better...you're buying a bigger box to hold a problem that punishes you for filling it.
+
+And before anyone says you can parallelize the problem to make it faster...you can, but you can't parallelize away the *work*.  The token bill is identical whether you run it serially or fan it across a thousand API keys, and the fleet of computers you'd need to chew through 100M records in any reasonable window is its own punchline.  You would be standing up a whole datacenter to brute-force what one engine does on a single node.  So yes, you can buy back the wall-clock through parallelization, but you can't buy back the token bill, and you probably can't buy that fleet either.
+
+Senzing's curve barely moves while the LLM curves climb the wall.
+
+### Cost
+
+<img src="data/figures/cost_figure.png" alt="Total Cost of ER" width="600">
+
+| Records | LLM batched fast | LLM blocked |
+|---:|---:|---:|
+| 500 | $0.44 | $0.56 |
+| 2,500 | $2.50 | $2.51 |
+| 5,000 | $4.93 | $4.98 |
+| 10,000 | $10.04 | $10.17 |
+
+Senzing isn't on this chart because Senzing's marginal cost basically isn't there.  You need a license file to run it, so it's not strictly free, but "every run costs you tokens" isn't how it works.  Once you're licensed, the marginal cost of running on more records is just CPU time on a machine you already own.  And Senzing offers a [free non-production evaluation license](https://senzing.com/request-non-prod-license/) you can use to duplicate this experiment yourself.  So for testing, prototyping, and benchmarking like I was doing here, the cost difference is genuinely zero versus ten dollars per 10,000 records.
+
+What my experiments showed was that it cost about ten dollars to process 10,000 records.  This is a pretty steep investment for a really small amount of data!  Extrapolated to the full 92,175 the LLM lands somewhere around $90–$100 per run.  *Per run.*  And sure, you wouldn't re-run the whole corpus constantly when a single new record arrives.  You would resolve it once, persist the results, and manage those new records on arrival.  But that is exactly where "just use an LLM" quietly stops being true, which is the rest of this post.
+
+### Tokens
+
+<img src="data/figures/tokens_figure.png" alt="Number of Tokens Used for ER" width="600">
+
+| Records | LLM batched fast | LLM blocked |
+|---:|---:|---:|
+| 500 | 86,941 | 93,141 |
+| 2,500 | 489,661 | 492,671 |
+| 5,000 | 964,027 | 968,657 |
+| 10,000 | 1,947,296 | 1,908,223 |
+
+The LLM burned through nearly two million tokens at 10,000 records, with the two variants almost identical.  (Senzing, of course, uses zero tokens because it isn't a language model.)  This figure is mostly here to show the cost numbers above aren't some weird pricing artifact.  The LLM really is doing nearly two million tokens of work to do what Senzing does in a fraction of the time at no marginal cost beyond the license.  None.
+
+And it's a moving target.  These are Opus 4.8 counts, and per Anthropic's own notes the updated tokenizer maps the same input to roughly 1.0–1.35× the tokens that Opus 4.6 used at the same per-token price (independent measurements often land higher).  So "the same job" quietly got more expensive with a version bump, which is its own argument against building your cost model on top of token economics you don't control.
+
+
+
 ---
 ## Acknowledgements
 
