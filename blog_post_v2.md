@@ -62,7 +62,7 @@ The next problem I encountered was that I couldn't send all of the data to the L
 
 The first approach, which I named the **batched fast** approach, fills its chunks by taking records from each data source in roughly the order they came in and rotating between sources.  The goal is throughput.  Which specific records end up together in a chunk is essentially arbitrary, dictated more by file ordering than by content.
 
-The **blocked** approach builds its chunks deliberately.  Records are grouped by the first few letters of the last name (I used four), so that anyone who might be a duplicate of someone else (every "GRIGGS," every "COHEN," every "ASHWORTH") ends up in the same chunk before being sent to the model.  The specific key doesn't matter — it's just a proxy to get sane block sizes.  Note that there are a ton of different ways that this could be done and I just created a real simple one.  I will say more about this below.
+The **blocked** approach builds its chunks deliberately.  Records are grouped by the first few letters of the last name (I used four), so that anyone who might be a duplicate of someone else (every "SMITH," every "JONES," every "GARCIA") ends up in the same chunk before being sent to the model.  The specific key doesn't matter — it's just a proxy to get sane block sizes.  Note that there are a ton of different ways that this could be done and I just created a real simple one.  I will say more about this below.
 
 This distinction matters because I theorized that the LLM can only merge two records when it sees them side by side in the same chunk.  If two duplicates land in different chunks, the fast approach might not have the chance to spot them.  The blocked approach is engineered so that they almost always do.
 
